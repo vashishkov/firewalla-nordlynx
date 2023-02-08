@@ -112,9 +112,11 @@ EOF
 EOF
 fi
 
-if [[ ! -f "/sys/class/net/vpn_$name" ]]; then
-  sudo wg syncconf vpn_$name $profile_path/$name.conf
-else
-  sudo ip link add dev vpn_$name type wireguard
-  sudo wg setconf vpn_$name $profile_path/$name.conf 
+if [[ -d "/sys/class/net/vpn_$name" && ! -z $update_conf ]]; then
+        echo "interface vpn_$name exists. Update config"
+        sudo wg syncconf vpn_$name $profile_path/$name.conf
+elif [[ ! -z $update_conf ]]; then
+        echo "interface vpn_$name not exists. Creating"
+        sudo ip link add dev vpn_$name type wireguard
+        sudo wg setconf vpn_$name $profile_path/$name.conf
 fi
