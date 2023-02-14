@@ -46,12 +46,12 @@ async function generateVPNConfig(params) {
          PrivateKey = ${params.privateKey}
          [Peer]
          PublicKey = ${params.pubkey}
-         Endpoint = ${params.hostname}:51820
+         Endpoint = ${params.station}:51820
          PersistentKeepalive = 20`
     var profile = {
         "peers": [{
         "publicKey": params.pubkey,
-        "endpoint": `${params.hostname}:51820`,
+        "endpoint": `${params.station}:51820`,
         "persistentKeepalive": "20",
         "allowedIPs": ["0.0.0.0/0"]}],
         "addresses": ["10.5.0.2/24"],
@@ -84,8 +84,12 @@ async function generateVPNConfig(params) {
     writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), {encoding: 'utf8'})
     fs.stat(`/sys/class/net/vpn_${fileName}`, function(err, stat) {
         if (err) {
-            exec(`sudo ip link add dev vpn_${fileName} type wireguard && \ 
-                  sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
+            exec(`sudo ip link add dev vpn_${fileName} type wireguard`)
+            exec(`sudo ip link set vpn_${fileName} mtu 1412`)
+            profile.addresses.forEach(ip => {
+                exec(`sudo ip addr add ${ip} dev vpn_${fileName}`)
+            })
+            exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
         } else {
             exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
         }
