@@ -54,7 +54,7 @@ async function generateVPNConfig(params) {
         var settings = await readFileAsync(`${profilePath + fileName}.settings`, { encoding: 'utf8' })
         .then((result) => {
             settings = JSON.parse(result)
-        settings.displayName = displayName
+            settings.displayName = displayName
             settings.serverDDNS = params.station
             return settings
     })

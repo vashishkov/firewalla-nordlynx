@@ -2,7 +2,7 @@
 2. Add desired counties and Nordlynx private key to `~/scripts/nordconf.json`
 3. Add crontab entry:
 ```
-echo "1 * * * * NODE_PATH=/home/pi/.node_modules/node_modules/ node /home/pi/scripts/nordlynx.js" > ~/.firewalla/config/user_crontab
+echo "1 * * * * NODE_PATH=/home/pi/.node_modules/node_modules/ node /home/pi/scripts/nordlynx.js" >> ~/.firewalla/config/user_crontab
 ```
 or run manually:
 ```
