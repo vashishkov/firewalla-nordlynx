@@ -91,7 +91,7 @@ async function generateVPNConfig(params) {
             })
             exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
         } else {
-            exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
+            exec(`sudo wg syncconf vpn_${fileName} ${profilePath + fileName}.conf`)
         }
     });
 }
