@@ -5,6 +5,7 @@ const rp = require('request-promise')
 const fs = require('fs')
 const readFileAsync = Promise.promisify(fs.readFile)
 const writeFileAsync = Promise.promisify(fs.writeFile)
+const exec = require('child-process-promise').exec;
 
 const config = JSON.parse(fs.readFileSync(`${__dirname}/nordconf.json`))
 const netif = 'nordlynx' 
@@ -40,18 +41,25 @@ async function  apiRequest(path, filters=null, limit=false) {
 async function generateVPNConfig(params) {
     var fileName = netif + params.countryid
     var displayName = `${params.country} (${params.city})`
+    var conf =
+        `[Interface]
+         PrivateKey = ${params.privateKey}
+         [Peer]
+         PublicKey = ${params.pubkey}
+         Endpoint = ${params.hostname}:51820
+         PersistentKeepalive = 20`
     var profile = {
-      "peers": [{
-      "publicKey": params.pubkey,
-      "endpoint": `${params.hostname}:51820`,
-      "persistentKeepalive": "20",
-      "allowedIPs": ["0.0.0.0/0"]}],
-      "addresses": ["10.5.0.2/24"],
-      "privateKey": params.privateKey,
-      "dns": ["1.1.1.1"]
+        "peers": [{
+        "publicKey": params.pubkey,
+        "endpoint": `${params.hostname}:51820`,
+        "persistentKeepalive": "20",
+        "allowedIPs": ["0.0.0.0/0"]}],
+        "addresses": ["10.5.0.2/24"],
+        "privateKey": params.privateKey,
+        "dns": ["1.1.1.1"]
     }
     try {
-        var settings = await readFileAsync(`${profilePath + fileName}.settings`, { encoding: 'utf8' })
+        var settings = await readFileAsync(`${profilePath + fileName}.settings`, {encoding: 'utf8'})
         .then((result) => {
             settings = JSON.parse(result)
             settings.displayName = displayName
@@ -60,19 +68,28 @@ async function generateVPNConfig(params) {
     })
     } catch (err) {
         var settings = {
-          "serverSubnets": [],
-          "overrideDefaultRoute": true,
-          "routeDNS": false,
-          "strictVPN": true,
-          "displayName": displayName,
-          "createdDate": `${Date.now() / 1000}`,
-          "serverVPNPort": 51820,
-          "subtype": "wireguard",
-          "serverDDNS": params.station
+            "serverSubnets": [],
+            "overrideDefaultRoute": true,
+            "routeDNS": false,
+            "strictVPN": true,
+            "displayName": displayName,
+            "createdDate": `${Date.now() / 1000}`,
+            "serverVPNPort": 51820,
+            "subtype": "wireguard",
+            "serverDDNS": params.station
         }
     }
-    writeFileAsync(`${profilePath + fileName}.settings`, JSON.stringify(settings), { encoding: 'utf8' })
-    writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), { encoding: 'utf8' })
+    writeFileAsync(`${profilePath + fileName}.conf`, conf, { encoding: 'utf8' })
+    writeFileAsync(`${profilePath + fileName}.settings`, JSON.stringify(settings), {encoding: 'utf8'})
+    writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), {encoding: 'utf8'})
+    fs.stat(`/sys/class/net/vpn_${fileName}`, function(err, stat) {
+        if (err) {
+            exec(`sudo ip link add dev vpn_${fileName} type wireguard && \ 
+                  sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
+        } else {
+            exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
+        }
+    });
 }
 
 async function getProfile(countryId) {
