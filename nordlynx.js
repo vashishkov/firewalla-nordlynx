@@ -95,7 +95,7 @@ async function generateVPNConfig(params) {
     writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), {encoding: 'utf8'})
     fs.stat(`/sys/class/net/vpn_${fileName}`, function(err, stat) {
         if (err) {
-            console.log(`Creating VPN Interface for profile ${fileName}`)
+            console.log(`${fileName}:\tcreating VPN Interface.`)
             exec(`sudo ip link add dev vpn_${fileName} type wireguard`)
             exec(`sudo ip link set vpn_${fileName} mtu 1412`)
             profile.addresses.forEach(ip => {
@@ -103,11 +103,11 @@ async function generateVPNConfig(params) {
             })
             exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
         } else if (event) {
-            console.log(`Endpoint changed. Updating VPN Interface for profile ${fileName}. Refreshing routes`)
+            console.log(`${displayName}:\tendpoint changed to ${params.hostname}. Refreshing routes.`)
             exec(`sudo wg syncconf vpn_${fileName} ${profilePath + fileName}.conf`)
             exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
         } else {
-            console.log(`Nothing to do. Server ${params.hostname} [${displayName}] is still recommended one`)
+            console.log(`${displayName}:\tnothing to do. Server ${params.hostname} is still recommended one.`)
         }
     });
 }
