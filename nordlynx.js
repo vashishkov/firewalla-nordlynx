@@ -5,7 +5,7 @@ const rp = require('request-promise')
 const fs = require('fs')
 const readFileAsync = Promise.promisify(fs.readFile)
 const writeFileAsync = Promise.promisify(fs.writeFile)
-const exec = require('child-process-promise').exec;
+const exec = require('child-process-promise').exec
 
 const config = JSON.parse(fs.readFileSync(`${__dirname}/nordconf.json`))
 const netif = 'nordlynx' 
@@ -64,7 +64,14 @@ async function generateVPNConfig(params) {
             settings = JSON.parse(result)
             settings.displayName = displayName
             settings.serverDDNS = params.station
-            return settings
+
+            var event = {
+                "type": "VPNClient:SettingsChanged",
+                "profileId": fileName,
+                "settings": settings,
+                "fromProcess": "VPNClient"
+            }
+            return settings, event
     })
     } catch (err) {
         var settings = {
@@ -78,20 +85,27 @@ async function generateVPNConfig(params) {
             "subtype": "wireguard",
             "serverDDNS": params.station
         }
+        var event = null
     }
+
     writeFileAsync(`${profilePath + fileName}.conf`, conf, { encoding: 'utf8' })
     writeFileAsync(`${profilePath + fileName}.settings`, JSON.stringify(settings), {encoding: 'utf8'})
     writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), {encoding: 'utf8'})
     fs.stat(`/sys/class/net/vpn_${fileName}`, function(err, stat) {
         if (err) {
+            console.log(`Creating VPN Interface for profile ${fileName}`)
             exec(`sudo ip link add dev vpn_${fileName} type wireguard`)
             exec(`sudo ip link set vpn_${fileName} mtu 1412`)
             profile.addresses.forEach(ip => {
                 exec(`sudo ip addr add ${ip} dev vpn_${fileName}`)
             })
             exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
-        } else {
+        } else if (event) {
+            console.log(`Endpoint changed. Updating VPN Interface for profile ${fileName}. Refreshing routes`)
             exec(`sudo wg syncconf vpn_${fileName} ${profilePath + fileName}.conf`)
+            exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
+        } else {
+            console.log(`Nothing to do. Server ${params.hostname} [${displayName}] is still recommended one`)
         }
     });
 }
