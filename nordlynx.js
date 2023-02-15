@@ -59,17 +59,20 @@ async function generateVPNConfig(params) {
         "dns": ["1.1.1.1"]
     }
     try {
-        var settings = await readFileAsync(`${profilePath + fileName}.settings`, {encoding: 'utf8'})
+        var settings, event = await readFileAsync(`${profilePath + fileName}.settings`, {encoding: 'utf8'})
         .then((result) => {
             settings = JSON.parse(result)
-            settings.displayName = displayName
-            settings.serverDDNS = params.station
-
-            var event = {
-                "type": "VPNClient:SettingsChanged",
-                "profileId": fileName,
-                "settings": settings,
-                "fromProcess": "VPNClient"
+            if (params.station == settings.serverDDNS) {
+                var event = null
+            } else {
+                settings.displayName = displayName
+                settings.serverDDNS = params.station
+                var event = {
+                    "type": "VPNClient:SettingsChanged",
+                    "profileId": fileName,
+                    "settings": settings,
+                    "fromProcess": "VPNClient"
+                }
             }
             return settings, event
     })
@@ -85,7 +88,6 @@ async function generateVPNConfig(params) {
             "subtype": "wireguard",
             "serverDDNS": params.station
         }
-        var event = null
     }
 
     writeFileAsync(`${profilePath + fileName}.conf`, conf, { encoding: 'utf8' })
