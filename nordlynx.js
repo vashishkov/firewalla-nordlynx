@@ -81,8 +81,8 @@ async function generateVPNConfig(params) {
         }
     }
     if (settings.serverName != params.hostname) {
-        params.load = await serverLoad(settings.serverName)
-        if (config.maxLoad < params.load.percent || 0) {
+        settings.load = await serverLoad(settings.serverName)
+        if (params.load < config.maxLoad < settings.load.percent || 0) {
             var updateConfig = true
             settings.displayName = displayName
             settings.serverName = params.hostname
@@ -143,6 +143,8 @@ async function getProfile(countryId) {
             params.city = res[0].locations[0].country.city.name
             params.hostname = res[0].hostname
             params.station = res[0].station
+            params.load = res[0].load
+            
             return params;
         }
     })
