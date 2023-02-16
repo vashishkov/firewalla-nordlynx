@@ -12,7 +12,7 @@ const profilePath = '/home/pi/.firewalla/run/wg_profile/'
 const api = {
     baseUrl: 'https://api.nordvpn.com',
     statsPath: '/server/stats/',
-    serversPath: '/v1/servers',
+    serversPath: '/v1/servers/',
 }
 const params = {
     privateKey: config.privateKey
@@ -57,7 +57,6 @@ async function generateVPNConfig(params) {
             allowedIPs: ["0.0.0.0/0"]
         }],
         addresses: ["10.5.0.2/24"],
-        privateKey: params.privateKey,
         dns: ["1.1.1.1"]
     }
     try {
@@ -94,37 +93,38 @@ async function generateVPNConfig(params) {
         await writeFileAsync(`${profilePath + fileName}.settings`, JSON.stringify(settings), { encoding: 'utf8' })
         await writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), { encoding: 'utf8' })
     }
-    fs.stat(`/sys/class/net/vpn_${fileName}`, function(err, stat) {
-        if (!err) {
-            var inetifExists = true
-        }
-        if (!inetifExists) {
+    fs.stat(`/sys/class/net/vpn_${fileName}`, ((err, stat) => {
+        if (err) {
+            if (config.debug) {
+                console.log(`${displayName}:\tInterface does not exsts. Creating.`)
+            }
             exec(`sudo ip link add dev vpn_${fileName} type wireguard`)
             exec(`sudo ip link set vpn_${fileName} mtu 1412`)
             profile.addresses.forEach(ip => {
                 exec(`sudo ip addr add ${ip} dev vpn_${fileName}`)
-            })
-        } else if (createConfig) {
-            if (config.debug) {
-                console.log(`${displayName}:\tClient created`)
-            }
-            exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
-        } else if (updateConfig) {
-            if (config.debug) {
-                console.log(`${displayName}:\tClient changed. Refreshing routes.`)
-            }
-            exec(`sudo wg syncconf vpn_${fileName} ${profilePath + fileName}.conf`)
-            exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
-        } else {
-            if (config.debug) {
-                console.log(`${displayName}:\tNothing to do. Server is still recommended one.`)
-            }
+            });
         }
-    });
+    }));
+    if (createConfig) {
+        if (config.debug) {
+            console.log(`${displayName}:\tClient created`)
+        }
+        exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
+    } else if (updateConfig) {
+        if (config.debug) {
+            console.log(`${displayName}:\tClient changed. Refreshing routes.`)
+        }
+        exec(`sudo wg syncconf vpn_${fileName} ${profilePath + fileName}.conf`)
+        exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
+    } else {
+        if (config.debug) {
+            console.log(`${displayName}:\tNothing to do. Server is still recommended one.`)
+        }
+    }
 }
 
 async function getProfile(countryId) {
-    var path = `${api.serversPath}/recommendations`
+    var path = api.serversPath + 'recommendations'
     var filters = ['[servers_technologies][identifier]=wireguard_udp']
     if (countryId != 0) {
         filters.push(`[country_id]=${countryId}`)
@@ -155,7 +155,7 @@ async function main() {
         var quickProfile = await getProfile(0)
         await generateVPNConfig(quickProfile)
     }
-    var countryList = await apiRequest(api.serversPath + '/countries')
+    var countryList = await apiRequest(api.serversPath + 'countries')
     for await (var item of config.countries) {
         var country = countryList.find(o => o.name === item)
         var profile = await getProfile(country.id)
