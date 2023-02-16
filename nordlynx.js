@@ -82,7 +82,7 @@ async function generateVPNConfig(params) {
     }
     if (settings.serverName != params.hostname) {
         settings.load = await serverLoad(settings.serverName)
-        if (params.load < config.maxLoad < settings.load.percent || 100) {
+        if (settings.load.percent > config.maxLoad && settings.load.percent > params.load) {
             var updateConfig = true
             settings.displayName = displayName
             settings.serverName = params.hostname
@@ -114,7 +114,7 @@ async function generateVPNConfig(params) {
         } else if (updateConfig) {
             if (config.debug) {
                 console.log(`${displayName}:\tClient changed. Refreshing routes. \
-                \n\t\t\tCurrent server load: ${settings.load.percent || 'Nan'}%, Next server load: ${params.load}%}, Load threshold: ${config.maxLoad}%`)
+                \n\t\t\tNext server load: ${params.load}%, Current server load: ${settings.load.percent}%, Load threshold: ${config.maxLoad}%`)
             }
             cmd.push(`sudo wg syncconf vpn_${fileName} ${profilePath + fileName}.conf`)
             cmd.push(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
