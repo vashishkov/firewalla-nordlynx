@@ -9,8 +9,11 @@ or run manually:
 NODE_PATH=/home/pi/.node_modules/node_modules/ node /home/pi/scripts/nordlynx.js
 ```
 
-TODO: 
-1. Check the active server load and swap it to next recommended server only if the load is above the desired threshold.
+How it work: 
+1. If no VPN clients exist, create them from the configuration.
+2. Compares the current server to the recommended server.
+3. Check the load on the current server if it is not the recommended server.
+4. If the load is below a certain threshold, the server rotation is skipped. If the load exceeds the threshold, replace the current server with the recommended one and trigger FireMain process to refresh routes.
 
 Available countries: 
 ```
