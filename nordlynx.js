@@ -71,6 +71,7 @@ async function generateVPNConfig(params) {
     } catch (err) {
         var createConfig = true
         var settings = {
+            displayName: displayName,
             serverName: params.hostname,
             serverSubnets: [],
             overrideDefaultRoute: true,
@@ -112,7 +113,7 @@ async function generateVPNConfig(params) {
             exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
         } else {
             if (config.debug) {
-                console.log(`${displayName}:\tNothing to do. Server is still recommended one. (load ${params.load.percent}%)`)
+                console.log(`${displayName}:\tNothing to do. Server is still recommended one.`)
             }
         }
     });
