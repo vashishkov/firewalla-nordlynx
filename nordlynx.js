@@ -7,7 +7,7 @@ const readFileAsync = Promise.promisify(fs.readFile)
 const writeFileAsync = Promise.promisify(fs.writeFile)
 const exec = require('child-process-promise').exec
 const config = JSON.parse(fs.readFileSync(`${__dirname}/nordconf.json`))
-const netif = 'nordlynx' 
+const netif = 'nordlynx'
 const profilePath = '/home/pi/.firewalla/run/wg_profile/'
 const api = {
     baseUrl: 'https://api.nordvpn.com',
@@ -20,7 +20,7 @@ const params = {
 
 'use strict'
 
-async function  apiRequest(path, filters=null, limit=false) {
+async function apiRequest(path, filters = null, limit = false) {
     var url = api.baseUrl + path
     if (filters) {
         url += `?filters${filters.join('&filters')}`
@@ -29,8 +29,8 @@ async function  apiRequest(path, filters=null, limit=false) {
         url += `&limit=${config.limit}`
     }
     var options = {
-      url: url,
-      json: true
+        url: url,
+        json: true
     }
     return await rp.get(options);
 }
@@ -82,7 +82,7 @@ async function generateVPNConfig(params) {
     }
     if (settings.serverName != params.hostname) {
         params.load = await serverLoad(settings.serverName)
-        if (params.load.percent > config.maxLoad || 0) {
+        if (config.maxLoad < params.load.percent || 0) {
             var updateConfig = true
             settings.displayName = displayName
             settings.serverName = params.hostname
@@ -145,7 +145,6 @@ async function getProfile(countryId) {
             params.station = res[0].station
             return params;
         }
-       
     })
 }
 
