@@ -60,12 +60,6 @@ async function generateVPNConfig(params) {
         privateKey: params.privateKey,
         dns: ["1.1.1.1"]
     }
-    var event = {
-        type: "VPNClient:SettingsChanged",
-        profileId: fileName,
-        settings: settings,
-        fromProcess: "VPNClient"
-    }
     try {
         var settings = JSON.parse(await readFileAsync(`${profilePath + fileName}.settings`, {encoding: 'utf8'}))
     } catch (err) {
@@ -80,9 +74,15 @@ async function generateVPNConfig(params) {
             createdDate: Date.now() / 1000
         }
     }
+    var event = {
+        type: "VPNClient:SettingsChanged",
+        profileId: fileName,
+        settings: settings,
+        fromProcess: "VPNClient"
+    }
     if (settings.serverName != params.hostname) {
         settings.load = await serverLoad(settings.serverName)
-        if (params.load < config.maxLoad < settings.load.percent || 0) {
+        if (params.load < config.maxLoad < settings.load.percent || 100) {
             var updateConfig = true
             settings.displayName = displayName
             settings.serverName = params.hostname
