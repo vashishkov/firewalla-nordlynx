@@ -82,7 +82,7 @@ async function generateVPNConfig(params) {
     }
     if (settings.serverName != params.hostname) {
         params.load = await serverLoad(settings.serverName)
-        if (params.load.percent > config.maxLoad) {
+        if (params.load.percent > config.maxLoad || 0) {
             var updateConfig = true
             settings.displayName = displayName
             settings.serverName = params.hostname
@@ -95,19 +95,23 @@ async function generateVPNConfig(params) {
         await writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), { encoding: 'utf8' })
     }
     fs.stat(`/sys/class/net/vpn_${fileName}`, function(err, stat) {
-        if (err) {
-            if (config.debug) {
-                console.log(`${displayName}:\tCreating VPN Interface.`)
-            }
+        if (!err) {
+            var inetifExists = true
+        }
+        if (!inetifExists) {
             exec(`sudo ip link add dev vpn_${fileName} type wireguard`)
             exec(`sudo ip link set vpn_${fileName} mtu 1412`)
             profile.addresses.forEach(ip => {
                 exec(`sudo ip addr add ${ip} dev vpn_${fileName}`)
             })
+        } else if (createConfig) {
+            if (config.debug) {
+                console.log(`${displayName}:\tClient created`)
+            }
             exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
         } else if (updateConfig) {
             if (config.debug) {
-                console.log(`${displayName}:\tEndpoint changed. Refreshing routes.`)
+                console.log(`${displayName}:\tClient changed. Refreshing routes.`)
             }
             exec(`sudo wg syncconf vpn_${fileName} ${profilePath + fileName}.conf`)
             exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
@@ -146,7 +150,7 @@ async function getProfile(countryId) {
 }
 
 async function main() {
-    if (config.recommended) {
+    if (config.recommended || false) {
         var quickProfile = await getProfile(0)
         await generateVPNConfig(quickProfile)
     }
