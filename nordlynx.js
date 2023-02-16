@@ -11,7 +11,7 @@ const netif = 'nordlynx'
 const profilePath = '/home/pi/.firewalla/run/wg_profile/'
 const api = {
     baseUrl: 'https://api.nordvpn.com',
-    statsPath: '/server/stats',
+    statsPath: '/server/stats/',
     serversPath: '/v1/servers',
 }
 const params = {
@@ -32,14 +32,11 @@ async function  apiRequest(path, filters=null, limit=false) {
       url: url,
       json: true
     }
-    response = rp.get(options)
-    .then((result) => {
-        return result;
-    })
-    .catch((err) => {
-        throw new Error(err.error);
-    });
-    return await response;
+    return await rp.get(options);
+}
+
+async function serverLoad(server) {
+    return await apiRequest(api.statsPath + server)
 }
 
 async function generateVPNConfig(params) {
@@ -63,27 +60,18 @@ async function generateVPNConfig(params) {
         privateKey: params.privateKey,
         dns: ["1.1.1.1"]
     }
+    var event = {
+        type: "VPNClient:SettingsChanged",
+        profileId: fileName,
+        settings: settings,
+        fromProcess: "VPNClient"
+    }
     try {
-        var settings, event = await readFileAsync(`${profilePath + fileName}.settings`, {encoding: 'utf8'})
-        .then((result) => {
-            settings = JSON.parse(result)
-            if (params.station == settings.serverDDNS) {
-                var event = null
-            } else {
-                settings.displayName = displayName
-                settings.serverDDNS = params.station
-                settings.createdDate = Date.now() / 1000 // Avoiding alarm notification about broken link
-                var event = {
-                    type: "VPNClient:SettingsChanged",
-                    profileId: fileName,
-                    settings: settings,
-                    fromProcess: "VPNClient"
-                }
-            }
-            return settings, event;
-    })
+        var settings = JSON.parse(await readFileAsync(`${profilePath + fileName}.settings`, {encoding: 'utf8'}))
     } catch (err) {
+        var createConfig = true
         var settings = {
+            serverName: params.hostname,
             serverSubnets: [],
             overrideDefaultRoute: true,
             routeDNS: false,
@@ -91,11 +79,20 @@ async function generateVPNConfig(params) {
             createdDate: Date.now() / 1000
         }
     }
-
-    writeFileAsync(`${profilePath + fileName}.conf`, conf, { encoding: 'utf8' })
-    writeFileAsync(`${profilePath + fileName}.settings`, JSON.stringify(settings), {encoding: 'utf8'})
-    writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), {encoding: 'utf8'})
-
+    if (settings.serverName != params.hostname) {
+        params.load = await serverLoad(settings.serverName)
+        if (params.load.percent > config.maxLoad) {
+            var updateConfig = true
+            settings.displayName = displayName
+            settings.serverName = params.hostname
+            settings.serverDDNS = params.station
+        }
+    }
+    if (createConfig || updateConfig) {
+        await writeFileAsync(`${profilePath + fileName}.conf`, conf, { encoding: 'utf8' })
+        await writeFileAsync(`${profilePath + fileName}.settings`, JSON.stringify(settings), { encoding: 'utf8' })
+        await writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), { encoding: 'utf8' })
+    }
     fs.stat(`/sys/class/net/vpn_${fileName}`, function(err, stat) {
         if (err) {
             if (config.debug) {
@@ -107,7 +104,7 @@ async function generateVPNConfig(params) {
                 exec(`sudo ip addr add ${ip} dev vpn_${fileName}`)
             })
             exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
-        } else if (event) {
+        } else if (updateConfig) {
             if (config.debug) {
                 console.log(`${displayName}:\tEndpoint changed. Refreshing routes.`)
             }
@@ -115,7 +112,7 @@ async function generateVPNConfig(params) {
             exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
         } else {
             if (config.debug) {
-                console.log(`${displayName}:\tNothing to do. Server is still recommended one.`)
+                console.log(`${displayName}:\tNothing to do. Server is still recommended one. (load ${params.load.percent}%)`)
             }
         }
     });
@@ -129,36 +126,35 @@ async function getProfile(countryId) {
     }
 
     return await apiRequest(path, filters, true)
-    .then((result) => {
-        params.pubkey = result[0].technologies.find(o => o.identifier === 'wireguard_udp').metadata[0].value
-        params.countryid = countryId
-        if (countryId != 0) {
-            params.country = result[0].locations[0].country.name
-        } else {
-            params.country = 'Nord Quick'
+    .then((res, err) => {
+        if (!err) {
+            params.pubkey = res[0].technologies.find(o => o.identifier === 'wireguard_udp').metadata[0].value
+            params.countryid = countryId
+            if (countryId != 0) {
+                params.country = res[0].locations[0].country.name
+            } else {
+                params.country = 'Nord Quick'
+            }
+            params.city = res[0].locations[0].country.city.name
+            params.hostname = res[0].hostname
+            params.station = res[0].station
+            return params;
         }
-        params.city = result[0].locations[0].country.city.name
-        params.hostname = result[0].hostname
-        params.station = result[0].station
-
-        return params;
+       
     })
 }
 
-if (config.recommended) {
-    getProfile(0)
-    .then((result) => {
-        generateVPNConfig(result)
-    })
+async function main() {
+    if (config.recommended) {
+        var quickProfile = await getProfile(0)
+        await generateVPNConfig(quickProfile)
+    }
+    var countryList = await apiRequest(api.serversPath + '/countries')
+    for await (var item of config.countries) {
+        var country = countryList.find(o => o.name === item)
+        var profile = await getProfile(country.id)
+        await generateVPNConfig(profile)
+    }
 }
 
-apiRequest(api.serversPath + '/countries')
-.then((result) => {
-    config.countries.forEach(item => {
-        var country = result.find(o => o.name === item)
-        getProfile(country.id)
-        .then((result) => {
-            generateVPNConfig(result)
-        })
-    })
-})
+main();

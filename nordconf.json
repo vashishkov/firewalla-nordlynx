@@ -1,4 +1,5 @@
 {
+  "maxLoad": 80,
   "recommended": true,
   "privateKey": "",
   "limit": 1,
