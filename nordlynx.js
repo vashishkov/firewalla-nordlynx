@@ -64,6 +64,7 @@ async function generateVPNConfig(params) {
     } catch (err) {
         var createConfig = true
         var settings = {
+            load: {percent: 0},
             displayName: displayName,
             serverName: params.hostname,
             serverSubnets: [],
@@ -94,33 +95,38 @@ async function generateVPNConfig(params) {
         await writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), { encoding: 'utf8' })
     }
     fs.stat(`/sys/class/net/vpn_${fileName}`, ((err, stat) => {
+        var cmd = []
         if (err) {
             if (config.debug) {
                 console.log(`${displayName}:\tInterface does not exsts. Creating.`)
             }
-            exec(`sudo ip link add dev vpn_${fileName} type wireguard`)
-            exec(`sudo ip link set vpn_${fileName} mtu 1412`)
+            cmd.push(`sudo ip link add dev vpn_${fileName} type wireguard`)
+            cmd.push(`sudo ip link set vpn_${fileName} mtu 1412`)
             profile.addresses.forEach(ip => {
-                exec(`sudo ip addr add ${ip} dev vpn_${fileName}`)
+                cmd.push(`sudo ip addr add ${ip} dev vpn_${fileName}`)
             });
         }
+        if (createConfig) {
+            if (config.debug) {
+                console.log(`${displayName}:\tClient created`)
+            }
+            cmd.push(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
+        } else if (updateConfig) {
+            if (config.debug) {
+                console.log(`${displayName}:\tClient changed. Refreshing routes. \
+                \n\t\t\tCurrent server load: ${settings.load.percent || 'Nan'}%, Next server load: ${params.load}%}, Load threshold: ${config.maxLoad}%`)
+            }
+            cmd.push(`sudo wg syncconf vpn_${fileName} ${profilePath + fileName}.conf`)
+            cmd.push(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
+        } else {
+            if (config.debug) {
+                console.log(`${displayName}:\tNothing to do. Server is still recommended one.`)
+            }
+        }
+        if (cmd.length > 0) {
+            exec(cmd.join('&&'))
+        }
     }));
-    if (createConfig) {
-        if (config.debug) {
-            console.log(`${displayName}:\tClient created`)
-        }
-        exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
-    } else if (updateConfig) {
-        if (config.debug) {
-            console.log(`${displayName}:\tClient changed. Refreshing routes.`)
-        }
-        exec(`sudo wg syncconf vpn_${fileName} ${profilePath + fileName}.conf`)
-        exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
-    } else {
-        if (config.debug) {
-            console.log(`${displayName}:\tNothing to do. Server is still recommended one.`)
-        }
-    }
 }
 
 async function getProfile(countryId) {
