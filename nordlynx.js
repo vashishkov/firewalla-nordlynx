@@ -14,9 +14,6 @@ const api = {
     statsPath: '/server/stats/',
     serversPath: '/v1/servers/',
 }
-const params = {
-    privateKey: config.privateKey
-}
 
 'use strict'
 
@@ -42,13 +39,13 @@ async function serverLoad(server) {
 async function generateVPNConfig(params) {
     var fileName = netif + params.countryid
     var displayName = `${params.country} (${params.city})`
-    var conf =
-        `[Interface]
-         PrivateKey = ${params.privateKey}
-         [Peer]
-         PublicKey = ${params.pubkey}
-         Endpoint = ${params.station}:51820
-         PersistentKeepalive = 20`
+    // var conf =
+    //     `[Interface]
+    //      PrivateKey = ${config.privateKey}
+    //      [Peer]
+    //      PublicKey = ${params.pubkey}
+    //      Endpoint = ${params.station}:51820
+    //      PersistentKeepalive = 20`
     var profile = {
         peers: [{
             publicKey: params.pubkey,
@@ -57,12 +54,13 @@ async function generateVPNConfig(params) {
             allowedIPs: ["0.0.0.0/0"]
         }],
         addresses: ["10.5.0.2/24"],
+        privateKey: config.privateKey,
         dns: ["1.1.1.1"]
     }
     try {
         var settings = JSON.parse(await readFileAsync(`${profilePath + fileName}.settings`, {encoding: 'utf8'}))
     } catch (err) {
-        var createConfig = true
+        var configCreated = true
         var settings = {
             load: {percent: 0},
             displayName: displayName,
@@ -83,20 +81,21 @@ async function generateVPNConfig(params) {
     if (settings.serverName != params.hostname) {
         settings.load = await serverLoad(settings.serverName)
         if (settings.load.percent > config.maxLoad && settings.load.percent > params.load) {
-            var updateConfig = true
+            var configUpdated = true
             settings.displayName = displayName
             settings.serverName = params.hostname
             settings.serverDDNS = params.station
         }
     }
-    if (createConfig || updateConfig) {
-        await writeFileAsync(`${profilePath + fileName}.conf`, conf, { encoding: 'utf8' })
+    if (configCreated || configUpdated) {
+        // await writeFileAsync(`${profilePath + fileName}.conf`, conf, { encoding: 'utf8' })
         await writeFileAsync(`${profilePath + fileName}.settings`, JSON.stringify(settings), { encoding: 'utf8' })
         await writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), { encoding: 'utf8' })
     }
     fs.stat(`/sys/class/net/vpn_${fileName}`, ((err, stat) => {
-        var cmd = []
         if (err) {
+            var cmd = []
+            var intefaceCreated = true
             if (config.debug) {
                 console.log(`${displayName}:\tInterface does not exsts. Creating.`)
             }
@@ -105,26 +104,18 @@ async function generateVPNConfig(params) {
             profile.addresses.forEach(ip => {
                 cmd.push(`sudo ip addr add ${ip} dev vpn_${fileName}`)
             });
+            exec(cmd.join('&&'))
         }
-        if (createConfig) {
+        if (configUpdated || configCreated || intefaceCreated) {
             if (config.debug) {
-                console.log(`${displayName}:\tClient created`)
+                console.log(`${displayName}:\tConfiguration changed | created. Refreshing routes.`)
             }
-            cmd.push(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
-        } else if (updateConfig) {
-            if (config.debug) {
-                console.log(`${displayName}:\tClient changed. Refreshing routes. \
-                \n\t\t\tNext server load: ${params.load}%, Current server load: ${settings.load.percent}%, Load threshold: ${config.maxLoad}%`)
-            }
-            cmd.push(`sudo wg syncconf vpn_${fileName} ${profilePath + fileName}.conf`)
-            cmd.push(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
+            // exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
+            exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
         } else {
             if (config.debug) {
                 console.log(`${displayName}:\tNothing to do. Server is still recommended one.`)
             }
-        }
-        if (cmd.length > 0) {
-            exec(cmd.join('&&'))
         }
     }));
 }
@@ -139,6 +130,7 @@ async function getProfile(countryId) {
     return await apiRequest(path, filters, true)
     .then((res, err) => {
         if (!err) {
+            var params = {}
             params.pubkey = res[0].technologies.find(o => o.identifier === 'wireguard_udp').metadata[0].value
             params.countryid = countryId
             if (countryId != 0) {
