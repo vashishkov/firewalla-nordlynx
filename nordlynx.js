@@ -7,7 +7,7 @@ const readFileAsync = Promise.promisify(fs.readFile)
 const writeFileAsync = Promise.promisify(fs.writeFile)
 const exec = require('child-process-promise').exec
 const config = JSON.parse(fs.readFileSync(`${__dirname}/nordconf.json`))
-const netif = 'nordlynx'
+const netif = 'lynx'
 const profilePath = '/home/pi/.firewalla/run/wg_profile/'
 const api = {
     baseUrl: 'https://api.nordvpn.com',
