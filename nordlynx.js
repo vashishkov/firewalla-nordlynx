@@ -39,13 +39,6 @@ async function serverLoad(server) {
 async function generateVPNConfig(params) {
     var fileName = netif + params.countryid
     var displayName = `${params.country} (${params.city})`
-    // var conf =
-    //     `[Interface]
-    //      PrivateKey = ${config.privateKey}
-    //      [Peer]
-    //      PublicKey = ${params.pubkey}
-    //      Endpoint = ${params.station}:51820
-    //      PersistentKeepalive = 20`
     var profile = {
         peers: [{
             publicKey: params.pubkey,
@@ -58,18 +51,28 @@ async function generateVPNConfig(params) {
         dns: ["1.1.1.1"]
     }
     try {
+        fs.accessSync(`/sys/class/net/vpn_${fileName}`)
+    } catch (err) {
+        if (err.code == 'ENOENT') {
+            var netifNotExist = true
+        }
+    }
+    try {
+        fs.statSync(`${profilePath + fileName}.json`)
         var settings = JSON.parse(await readFileAsync(`${profilePath + fileName}.settings`, {encoding: 'utf8'}))
     } catch (err) {
-        var configCreated = true
-        var settings = {
-            load: {percent: 0},
-            displayName: displayName,
-            serverName: params.hostname,
-            serverSubnets: [],
-            overrideDefaultRoute: true,
-            routeDNS: false,
-            strictVPN: true,
-            createdDate: Date.now() / 1000
+        if (err.code == 'ENOENT') {
+            var configCreated = true
+            var settings = {
+                load: {percent: 0},
+                displayName: displayName,
+                serverName: params.hostname,
+                serverSubnets: [],
+                overrideDefaultRoute: true,
+                routeDNS: false,
+                strictVPN: true,
+                createdDate: Date.now() / 1000
+            }
         }
     }
     var event = {
@@ -88,36 +91,31 @@ async function generateVPNConfig(params) {
         }
     }
     if (configCreated || configUpdated) {
-        // await writeFileAsync(`${profilePath + fileName}.conf`, conf, { encoding: 'utf8' })
         await writeFileAsync(`${profilePath + fileName}.settings`, JSON.stringify(settings), { encoding: 'utf8' })
         await writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), { encoding: 'utf8' })
     }
-    fs.stat(`/sys/class/net/vpn_${fileName}`, ((err, stat) => {
-        if (err) {
-            var cmd = []
-            var intefaceCreated = true
-            if (config.debug) {
-                console.log(`${displayName}:\tInterface does not exsts. Creating.`)
-            }
-            cmd.push(`sudo ip link add dev vpn_${fileName} type wireguard`)
-            cmd.push(`sudo ip link set vpn_${fileName} mtu 1412`)
-            profile.addresses.forEach(ip => {
-                cmd.push(`sudo ip addr add ${ip} dev vpn_${fileName}`)
-            });
-            exec(cmd.join('&&'))
+    if (netifNotExist) {
+        var cmd = []
+        if (config.debug) {
+            console.log(`${displayName}:\tInterface does not exsts. Creating.`)
         }
-        if (configUpdated || configCreated || intefaceCreated) {
-            if (config.debug) {
-                console.log(`${displayName}:\tConfiguration changed | created. Refreshing routes.`)
-            }
-            // exec(`sudo wg setconf vpn_${fileName} ${profilePath + fileName}.conf`)
-            exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
-        } else {
-            if (config.debug) {
-                console.log(`${displayName}:\tNothing to do. Server is still recommended one.`)
-            }
+        cmd.push(`sudo ip link add dev vpn_${fileName} type wireguard`)
+        cmd.push(`sudo ip link set vpn_${fileName} mtu 1412`)
+        profile.addresses.forEach(ip => {
+            cmd.push(`sudo ip addr add ${ip} dev vpn_${fileName}`)
+        });
+        exec(cmd.join('&&'))
+    }
+    if (configUpdated || configCreated || netifNotExist) {
+        if (config.debug) {
+            console.log(`${displayName}:\tConfiguration updated | created. Refreshing routes.`)
         }
-    }));
+        exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
+    } else {
+        if (config.debug) {
+            console.log(`${displayName}:\tNothing to do. Server is still recommended one.`)
+        }
+    }
 }
 
 async function getProfile(countryId) {
