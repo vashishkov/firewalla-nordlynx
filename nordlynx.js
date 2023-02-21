@@ -37,7 +37,7 @@ async function serverLoad(server) {
 }
 
 async function generateVPNConfig(params) {
-    var fileName = netif + params.countryid
+    var profileId = netif + params.countryid
     var displayName = `${params.country} (${params.city})`
     var profile = {
         peers: [{
@@ -51,6 +51,9 @@ async function generateVPNConfig(params) {
         dns: ["1.1.1.1"]
     }
     var defaultSettings = {
+        subtype: 'wireguard',
+        profileId: profileId,
+        deviceCount: 0,
         load: {percent: 0},
         displayName: displayName,
         serverName: params.hostname,
@@ -61,15 +64,15 @@ async function generateVPNConfig(params) {
         createdDate: Date.now() / 1000
     }
     try {
-        fs.accessSync(`/sys/class/net/vpn_${fileName}`)
+        fs.accessSync(`/sys/class/net/vpn_${profileId}`)
     } catch (err) {
         if (err.code == 'ENOENT') {
             var netifNotExist = true
         }
     }
     try {
-        fs.statSync(`${profilePath + fileName}.json`)
-        var settings = JSON.parse(await readFileAsync(`${profilePath + fileName}.settings`, {encoding: 'utf8'}))
+        fs.statSync(`${profilePath + profileId}.json`)
+        var settings = JSON.parse(await readFileAsync(`${profilePath + profileId}.settings`, {encoding: 'utf8'}))
     } catch (err) {
         if (err.code == 'ENOENT') {
             var configCreated = true
@@ -78,12 +81,12 @@ async function generateVPNConfig(params) {
     }
     var brokerEvent = {
         type: "VPNClient:SettingsChanged",
-        profileId: fileName,
+        profileId: profileId,
         settings: settings,
         fromProcess: "VPNClient"
     }
     if (settings.serverName != params.hostname) {
-        settings.load = await serverLoad(settings.serverName)
+        settings.load.percent = await serverLoad(settings.serverName)
         if (settings.load.percent > config.maxLoad && settings.load.percent > params.load) {
             var configUpdated = true
             settings.displayName = displayName
@@ -92,18 +95,18 @@ async function generateVPNConfig(params) {
         }
     }
     if (configCreated || configUpdated) {
-        await writeFileAsync(`${profilePath + fileName}.settings`, JSON.stringify(settings), { encoding: 'utf8' })
-        await writeFileAsync(`${profilePath + fileName}.json`, JSON.stringify(profile), { encoding: 'utf8' })
+        await writeFileAsync(`${profilePath + profileId}.settings`, JSON.stringify(settings), { encoding: 'utf8' })
+        await writeFileAsync(`${profilePath + profileId}.json`, JSON.stringify(profile), { encoding: 'utf8' })
     }
     if (netifNotExist) {
         var cmd = []
         if (config.debug) {
             console.log(`${displayName}:\tInterface does not exsts. Creating.`)
         }
-        cmd.push(`sudo ip link add dev vpn_${fileName} type wireguard`)
-        cmd.push(`sudo ip link set vpn_${fileName} mtu 1412`)
+        cmd.push(`sudo ip link add dev vpn_${profileId} type wireguard`)
+        cmd.push(`sudo ip link set vpn_${profileId} mtu 1412`)
         profile.addresses.forEach(ip => {
-            cmd.push(`sudo ip addr add ${ip} dev vpn_${fileName}`)
+            cmd.push(`sudo ip addr add ${ip} dev vpn_${profileId}`)
         });
         exec(cmd.join('&&'))
     }
