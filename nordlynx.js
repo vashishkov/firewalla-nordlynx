@@ -39,12 +39,6 @@ async function serverLoad(server) {
 async function generateVPNConfig(params) {
     var fileName = netif + params.countryid
     var displayName = `${params.country} (${params.city})`
-    var brokerEvent = {
-        type: "VPNClient:SettingsChanged",
-        profileId: fileName,
-        settings: settings,
-        fromProcess: "VPNClient"
-    }
     var profile = {
         peers: [{
             publicKey: params.pubkey,
@@ -81,6 +75,12 @@ async function generateVPNConfig(params) {
             var configCreated = true
             var settings = defaultSettings
         }
+    }
+    var brokerEvent = {
+        type: "VPNClient:SettingsChanged",
+        profileId: fileName,
+        settings: settings,
+        fromProcess: "VPNClient"
     }
     if (settings.serverName != params.hostname) {
         settings.load = await serverLoad(settings.serverName)
