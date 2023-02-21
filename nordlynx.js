@@ -39,6 +39,12 @@ async function serverLoad(server) {
 async function generateVPNConfig(params) {
     var fileName = netif + params.countryid
     var displayName = `${params.country} (${params.city})`
+    var brokerEvent = {
+        type: "VPNClient:SettingsChanged",
+        profileId: fileName,
+        settings: settings,
+        fromProcess: "VPNClient"
+    }
     var profile = {
         peers: [{
             publicKey: params.pubkey,
@@ -49,6 +55,16 @@ async function generateVPNConfig(params) {
         addresses: ["10.5.0.2/24"],
         privateKey: config.privateKey,
         dns: ["1.1.1.1"]
+    }
+    var defaultSettings = {
+        load: {percent: 0},
+        displayName: displayName,
+        serverName: params.hostname,
+        serverSubnets: [],
+        overrideDefaultRoute: true,
+        routeDNS: false,
+        strictVPN: true,
+        createdDate: Date.now() / 1000
     }
     try {
         fs.accessSync(`/sys/class/net/vpn_${fileName}`)
@@ -63,23 +79,8 @@ async function generateVPNConfig(params) {
     } catch (err) {
         if (err.code == 'ENOENT') {
             var configCreated = true
-            var settings = {
-                load: {percent: 0},
-                displayName: displayName,
-                serverName: params.hostname,
-                serverSubnets: [],
-                overrideDefaultRoute: true,
-                routeDNS: false,
-                strictVPN: true,
-                createdDate: Date.now() / 1000
-            }
+            var settings = defaultSettings
         }
-    }
-    var event = {
-        type: "VPNClient:SettingsChanged",
-        profileId: fileName,
-        settings: settings,
-        fromProcess: "VPNClient"
     }
     if (settings.serverName != params.hostname) {
         settings.load = await serverLoad(settings.serverName)
@@ -110,7 +111,7 @@ async function generateVPNConfig(params) {
         if (config.debug) {
             console.log(`${displayName}:\tConfiguration updated | created. Refreshing routes.`)
         }
-        exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(event)}'`)
+        exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(brokerEvent)}'`)
     } else {
         if (config.debug) {
             console.log(`${displayName}:\tNothing to do. Server is still recommended one.`)
