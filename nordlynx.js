@@ -86,12 +86,24 @@ async function generateVPNConfig(params) {
         fromProcess: "VPNClient"
     }
     if (settings.serverName != params.hostname) {
-        settings.load.percent = await serverLoad(settings.serverName)
+        settings.load = await serverLoad(settings.serverName)
         if (settings.load.percent > config.maxLoad && settings.load.percent > params.load) {
+            if (config.debug) {
+                console.log(`${params.country}:\tServer changed from ${settings.serverName} (load ${settings.load.percent}%) to ${params.hostname} (load ${params.load}%).`)
+            }
             var configUpdated = true
             settings.displayName = displayName
             settings.serverName = params.hostname
             settings.serverDDNS = params.station
+            settings.load.percent = params.load
+        } else {
+            if (config.debug) {
+                console.log(`${params.country}:\tServer ${settings.serverName} (load ${settings.load.percent}%) is still recommended one.`)
+            }
+        }
+    } else {
+        if (config.debug) {
+            console.log(`${params.country}:\tServer ${settings.serverName} is still recommended one.`)
         }
     }
     if (configCreated || configUpdated) {
@@ -101,7 +113,7 @@ async function generateVPNConfig(params) {
     if (netifNotExist) {
         var cmd = []
         if (config.debug) {
-            console.log(`${displayName}:\tInterface does not exsts. Creating.`)
+            console.log(`${params.country}:\tInterface does not exsts. Creating.`)
         }
         cmd.push(`sudo ip link add dev vpn_${profileId} type wireguard`)
         cmd.push(`sudo ip link set vpn_${profileId} mtu 1412`)
@@ -112,13 +124,9 @@ async function generateVPNConfig(params) {
     }
     if (configUpdated || configCreated || netifNotExist) {
         if (config.debug) {
-            console.log(`${displayName}:\tConfiguration updated | created. Refreshing routes.`)
+            console.log(`${params.country}:\tRefreshing routes.`)
         }
         exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(brokerEvent)}'`)
-    } else {
-        if (config.debug) {
-            console.log(`${displayName}:\tNothing to do. Server is still recommended one.`)
-        }
     }
 }
 
