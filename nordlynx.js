@@ -96,6 +96,7 @@ async function generateVPNConfig(params) {
             settings.serverName = params.hostname
             settings.serverDDNS = params.station
             settings.load.percent = params.load
+            settings.createdDate = Date.now() / 1000
         } else {
             if (config.debug) {
                 console.log(`${params.country}:\tServer ${settings.serverName} (load ${settings.load.percent}%) is still recommended one.`)
@@ -113,7 +114,7 @@ async function generateVPNConfig(params) {
     if (netifNotExist) {
         var cmd = []
         if (config.debug) {
-            console.log(`${params.country}:\tInterface does not exsts. Creating.`)
+            console.log(`${params.country}:\tCreating vpn_${profileId} interface.`)
         }
         cmd.push(`sudo ip link add dev vpn_${profileId} type wireguard`)
         cmd.push(`sudo ip link set vpn_${profileId} mtu 1412`)
@@ -124,7 +125,7 @@ async function generateVPNConfig(params) {
     }
     if (configUpdated || configCreated || netifNotExist) {
         if (config.debug) {
-            console.log(`${params.country}:\tRefreshing routes.`)
+            console.log(`${params.country}:\tRefreshing routes for vpn_${profileId} interface.`)
         }
         exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(brokerEvent)}'`)
     }
