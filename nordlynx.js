@@ -105,10 +105,18 @@ async function generateVPNConfig(params) {
         await writeFileAsync(`${profilePath + profileId}.json`, JSON.stringify(profile), { encoding: 'utf8' })
     }
     if (configUpdated || configCreated) {
-        if (config.debug) {
-            console.log(`${params.country}:\tRefreshing routes for vpn_${profileId} interface.`)
-        }
-        exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(brokerEvent)}'`)
+        fs.stat(`/sys/class/net/vpn_${profileId}`, ((err, stat) => {
+            if (stat) {
+                if (config.debug) {
+                    console.log(`${params.country}:\tRefreshing routes for vpn_${profileId} profile.`)
+                }
+                exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(brokerEvent)}'`)
+            } else if (err.code == 'ENOENT') {
+                if (config.debug) {
+                    console.log(`${params.country}:\tInterface vpn_${profileId} is not UP. Skipping routes refresh.`)
+                }
+            }
+        }));
     }
 }
 
