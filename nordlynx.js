@@ -36,7 +36,7 @@ async function serverLoad(server) {
     return await apiRequest(api.statsPath + server)
 }
 
-async function generateVPNConfig(params) {
+async function generateVPNConfig(params, ip) {
     var profileId = netif + params.countryid
     var displayName = `${params.country} (${params.city})`
     var profile = {
@@ -46,7 +46,7 @@ async function generateVPNConfig(params) {
             persistentKeepalive: 20,
             allowedIPs: ["0.0.0.0/0"]
         }],
-        addresses: ["10.5.0.2/24"],
+        addresses: [ip],
         privateKey: config.privateKey,
         dns: ["1.1.1.1"]
     }
@@ -72,17 +72,24 @@ async function generateVPNConfig(params) {
             var settings = defaultSettings
         }
     }
+    try {
+        fs.statSync(`/sys/class/net/vpn_${profileId}`)
+    } catch (err) {
+        if (err.code == 'ENOENT') {
+            var netifDown = true
+        }
+    }
     var brokerEvent = {
         type: "VPNClient:SettingsChanged",
         profileId: profileId,
         settings: settings,
         fromProcess: "VPNClient"
     }
-    if (settings.serverName != params.hostname) {
+    if (settings.serverName != params.hostname && !netifDown) {
         settings.load = await serverLoad(settings.serverName)
         if (settings.load.percent > config.maxLoad && settings.load.percent > params.load) {
             if (config.debug) {
-                console.log(`${params.country}:\tServer changed from ${settings.serverName} (load ${settings.load.percent}%) to ${params.hostname} (load ${params.load}%).`)
+                console.log(`${settings.serverName} (load ${settings.load.percent}%) changed to ${params.hostname} (load ${params.load}%).`)
             }
             var configUpdated = true
             settings.displayName = displayName
@@ -92,12 +99,12 @@ async function generateVPNConfig(params) {
             settings.createdDate = Date.now() / 1000
         } else {
             if (config.debug) {
-                console.log(`${params.country}:\tServer ${settings.serverName} (load ${settings.load.percent}%) is still recommended one.`)
+                console.log(`${settings.serverName} (load ${settings.load.percent}%) is still recommended.`)
             }
         }
     } else {
         if (config.debug) {
-            console.log(`${params.country}:\tServer ${settings.serverName} is still recommended one.`)
+            console.log(`${settings.serverName} is still recommended.`)
         }
     }
     if (configCreated || configUpdated) {
@@ -105,18 +112,10 @@ async function generateVPNConfig(params) {
         await writeFileAsync(`${profilePath + profileId}.json`, JSON.stringify(profile), { encoding: 'utf8' })
     }
     if (configUpdated || configCreated) {
-        fs.stat(`/sys/class/net/vpn_${profileId}`, ((err, stat) => {
-            if (stat) {
-                if (config.debug) {
-                    console.log(`${params.country}:\tRefreshing routes for vpn_${profileId} profile.`)
-                }
-                exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(brokerEvent)}'`)
-            } else if (err.code == 'ENOENT') {
-                if (config.debug) {
-                    console.log(`${params.country}:\tInterface vpn_${profileId} is not UP. Skipping routes refresh.`)
-                }
-            }
-        }));
+        if (config.debug) {
+            console.log(`refreshing routes for ${settings.serverName} (load ${settings.load.percent}%).`)
+        }
+        exec(`redis-cli PUBLISH TO.FireMain '${JSON.stringify(brokerEvent)}'`)
     }
 }
 
@@ -131,17 +130,22 @@ async function getProfile(countryId) {
     .then((res, err) => {
         if (!err) {
             var params = {}
-            params.pubkey = res[0].technologies.find(o => o.identifier === 'wireguard_udp').metadata[0].value
+            if (config.limit > 1) {
+                server = res.sort((a, b) => parseFloat(a.load) - parseFloat(b.load))[0]
+            } else {
+                server = res[0]
+            }
+            params.pubkey = server.technologies.find(o => o.identifier === 'wireguard_udp').metadata[0].value
             params.countryid = countryId
             if (countryId != 0) {
-                params.country = res[0].locations[0].country.name
+                params.country = server.locations[0].country.name
             } else {
-                params.country = 'Nord Quick'
+                params.country = 'Quick'
             }
-            params.city = res[0].locations[0].country.city.name
-            params.hostname = res[0].hostname
-            params.station = res[0].station
-            params.load = res[0].load
+            params.city = server.locations[0].country.city.name
+            params.hostname = server.hostname
+            params.station = server.station
+            params.load = server.load
             
             return params;
         }
@@ -149,15 +153,18 @@ async function getProfile(countryId) {
 }
 
 async function main() {
+    var startOctet = 2
     if (config.recommended || false) {
         var quickProfile = await getProfile(0)
-        await generateVPNConfig(quickProfile)
+        var ip = `10.5.0.${startOctet++}/24`
+        await generateVPNConfig(quickProfile, ip)
     }
     var countryList = await apiRequest(api.serversPath + 'countries')
     for await (var item of config.countries) {
         var country = countryList.find(o => o.name === item)
         var profile = await getProfile(country.id)
-        await generateVPNConfig(profile)
+        var ip = `10.5.0.${startOctet++}/24`
+        await generateVPNConfig(profile, ip)
     }
 }
 
