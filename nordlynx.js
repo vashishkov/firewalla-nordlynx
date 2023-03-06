@@ -153,17 +153,16 @@ async function getProfile(countryId) {
 }
 
 async function main() {
-    var startOctet = 2
     if (config.recommended || false) {
         var quickProfile = await getProfile(0)
-        var ip = `10.5.0.${startOctet++}/24`
+        var ip = '10.5.0.5/24'
         await generateVPNConfig(quickProfile, ip)
     }
     var countryList = await apiRequest(api.serversPath + 'countries')
     for await (var item of config.countries) {
         var country = countryList.find(o => o.name === item)
         var profile = await getProfile(country.id)
-        var ip = `10.5.0.${startOctet++}/24`
+        var ip = `10.5.0.${country.id}/24` // TODO: make octet unique, not country id
         await generateVPNConfig(profile, ip)
     }
 }

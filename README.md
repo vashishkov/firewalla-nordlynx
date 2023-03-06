@@ -17,5 +17,5 @@ How it work:
 
 Available countries: 
 ```
-curl --silent https://api.nordvpn.com/server | jq --raw-output '[.[].country] | sort | unique | .[]'
+curl --silent "https://api.nordvpn.com/v1/servers/countries" | jq --raw-output '.[] | [.id, .name] | @tsv'
 ```
