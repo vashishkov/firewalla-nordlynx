@@ -36,7 +36,7 @@ async function serverLoad(server) {
     return await apiRequest(api.statsPath + server)
 }
 
-async function generateVPNConfig(params, ip) {
+async function generateVPNConfig(params) {
     var profileId = netif + params.countryid
     var displayName = `${params.country} (${params.city})`
     var profile = {
@@ -46,7 +46,7 @@ async function generateVPNConfig(params, ip) {
             persistentKeepalive: 20,
             allowedIPs: ["0.0.0.0/0"]
         }],
-        addresses: [ip],
+        addresses: [params.ip],
         privateKey: config.privateKey,
         dns: ["1.1.1.1"]
     }
@@ -139,13 +139,16 @@ async function getProfile(countryId) {
             params.countryid = countryId
             if (countryId != 0) {
                 params.country = server.locations[0].country.name
+                params.ip = `10.5.0.${countryId}/24` // TODO: make octet unique, not country id
             } else {
                 params.country = 'Quick'
+                params.ip = `10.5.0.5/24`
             }
             params.city = server.locations[0].country.city.name
             params.hostname = server.hostname
             params.station = server.station
             params.load = server.load
+
             
             return params;
         }
@@ -155,15 +158,13 @@ async function getProfile(countryId) {
 async function main() {
     if (config.recommended || false) {
         var quickProfile = await getProfile(0)
-        var ip = '10.5.0.5/24'
-        await generateVPNConfig(quickProfile, ip)
+        await generateVPNConfig(quickProfile)
     }
     var countryList = await apiRequest(api.serversPath + 'countries')
     for await (var item of config.countries) {
         var country = countryList.find(o => o.name === item)
         var profile = await getProfile(country.id)
-        var ip = `10.5.0.${country.id}/24` // TODO: make octet unique, not country id
-        await generateVPNConfig(profile, ip)
+        await generateVPNConfig(profile)
     }
 }
 
