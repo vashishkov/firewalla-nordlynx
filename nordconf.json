@@ -3,9 +3,5 @@
   "recommended": true,
   "privateKey": "",
   "limit": 1,
-  "countries": [
-    "Portugal",
-    "Georgia",
-    "Ukraine"
-  ]
+  "countries": ["Portugal", "Georgia", "Ukraine"]
 }
