@@ -66,17 +66,6 @@ async function readOrCreateFiles(profileId, defaultSettings, defaultProfile) {
   return { settings, profile };
 }
 
-async function saveSettingsAndProfile(profileId, settings, profile) {
-  const settingsFilePath = `${profilePath + profileId}.settings`;
-  const profileFilePath = `${profilePath + profileId}.json`;
-
-  console.log(`Saving settings to ${settingsFilePath}`);
-  await writeFileAsync(settingsFilePath, JSON.stringify(settings), 'utf8');
-
-  console.log(`Saving profile to ${profileFilePath}`);
-  await writeFileAsync(profileFilePath, JSON.stringify(profile), 'utf8');
-}
-
 async function generateVPNConfig(params) {
   const profileId = netif + params.countryid;
   const displayName = `${params.country} (${params.hostname})`;
@@ -128,9 +117,7 @@ async function getProfile(countryId) {
     }
 
     const response = await apiRequest(path, filters, true);
-    const server = (config.limit > 1) 
-      ? response.sort((a, b) => parseFloat(a.load) - parseFloat(b.load))[0]
-      : response[0];
+    const server = response[0];
 
     const pubkey = server.technologies.find(o => o.identifier === "wireguard_udp").metadata[0].value;
     
@@ -138,10 +125,9 @@ async function getProfile(countryId) {
       pubkey: pubkey,
       countryid: countryId,
       country: (countryId !== 0) ? server.locations[0].country.name : "Quick",
-      ip: (countryId !== 0) ? `10.5.0.${countryId}/24` : `10.5.0.5/24`, // Modify IP logic as needed
+      ip: (countryId !== 0) ? `10.5.0.${countryId}/24` : `10.5.0.5/24`,
       hostname: server.hostname,
       station: server.station,
-      load: server.load
     };
   } catch (err) {
     console.error("Error fetching profile:", err);
