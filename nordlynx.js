@@ -69,22 +69,21 @@ async function readOrCreateFiles(profileId, defaultSettings, defaultProfile) {
 async function generateVPNConfig(params) {
   const profileId = netif + params.countryid;
   const displayName = `${params.country} (${params.hostname})`;
-  
-  const createdProfile = createProfile(params, config.privateKey);
-  const defaultSettings = createDefaultSettings(displayName, profileId, params);
 
   await ensureDirectoryExists(profilePath);
 
-  const { settings, profile } = await readOrCreateFiles(profileId, defaultSettings, createdProfile);
+  const { settings: currentSettings, profile: currentProfile } = await readOrCreateFiles(profileId, createDefaultSettings(displayName, profileId, params), createProfile(params, config.privateKey));
 
   const netifDown = !(await doesInterfaceExist(profileId));
-  const brokerEvent = createBrokerEvent(profileId, settings);
 
-  if (await shouldUpdateConfig(settings, params, netifDown)) {
-    updateSettings(settings, params, displayName);
-    await writeFileAsync(`${profilePath + profileId}.settings`, JSON.stringify(settings), 'utf8');
-    await writeFileAsync(`${profilePath + profileId}.json`, JSON.stringify(profile), 'utf8');
-    await publishBrokerEvent(brokerEvent);
+  if (await shouldUpdateConfig(currentSettings, params, netifDown)) {
+    const updatedSettings = createSettings(currentSettings, params, displayName);
+    const updatedProfile = createProfile(params, config.privateKey);
+
+    await writeFileAsync(`${profilePath + profileId}.settings`, JSON.stringify(updatedSettings), 'utf8');
+    await writeFileAsync(`${profilePath + profileId}.json`, JSON.stringify(updatedProfile), 'utf8');
+
+    await publishBrokerEvent(createBrokerEvent(profileId, updatedSettings));
   }
 }
 
@@ -178,12 +177,15 @@ async function shouldUpdateConfig(settings, params, netifDown) {
   return false;
 }
 
-function updateSettings(settings, params, displayName) {
-  settings.displayName = displayName;
-  settings.serverName = params.hostname;
-  settings.serverDDNS = params.station;
-  settings.load.percent = params.load;
-  settings.createdDate = Date.now() / 1000;
+function createSettings(currentSettings, params, displayName) {
+  return {
+    ...currentSettings,
+    displayName: displayName,
+    serverName: params.hostname,
+    serverDDNS: params.station,
+    load: { percent: params.load },
+    createdDate: Date.now() / 1000
+  };
 }
 
 async function publishBrokerEvent(brokerEvent) {
